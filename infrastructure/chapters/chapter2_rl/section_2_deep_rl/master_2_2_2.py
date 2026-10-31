@@ -65,6 +65,11 @@ Policy Gradient (VPG) on the CartPole environment.
 >
 > - Understand the Policy Gradient Theorem
 > - Understand the VPG algorithm: how to perform on-policy policy gradient
+
+### Optional Reading
+
+- [Lilian Weng - Policy Gradient Algorithms](https://lilianweng.github.io/posts/2018-04-08-policy-gradient/)
+    - A clear and dense overview of the policy gradient theorem and VPG, as well as later algorithms like PPO.
 '''
 
 # ! CELL TYPE: markdown
@@ -1051,6 +1056,8 @@ that expression. Rewrote the paragraph to describe what the test actually requir
 END FILTERS
 
 The total loss is the mean of the losses over all timesteps, over all trajectories.
+
+A note on this convention: the policy gradient estimator is strictly a *sum* over timesteps within a trajectory, averaged over trajectories (environments). Taking the mean over timesteps as well just divides the loss by `num_steps`. Since every environment here runs for the same number of steps, this is only a constant rescaling of the gradient (equivalent to a different learning rate), so it doesn't change what the algorithm does. We use the mean over everything so that the loss scale doesn't depend on the rollout length.
 '''
 
 # ! CELL TYPE: code
