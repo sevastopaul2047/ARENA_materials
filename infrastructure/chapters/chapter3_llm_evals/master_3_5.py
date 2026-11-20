@@ -67,7 +67,7 @@ AI control is one of the major lines of work in technical AI safety today: the i
 
 ### A note on cost
 
-Every `eval()` call in this chapter is gated behind an `if MAIN and FLAG_RUN_*:` flag and we default to a 20 problem subset. APPS has 1500 interview level problems, but using 20 will cost about $5 to run all the way through. (Running the full APPS dataset would cost approximately $200, so we're not going to do that!)
+Every `eval()` call in this chapter is gated behind an `if MAIN and FLAG_RUN_*:` flag and we default to a 20 problem subset. APPS has 1500 interview level problems, but using 20 will cost about \$5 to run all the way through. (Running the full APPS dataset would cost approximately \$200, so we're not going to do that!)
 
 ### A note on models
 
@@ -208,58 +208,12 @@ ipython.run_line_magic("load_ext", "autoreload")
 ipython.run_line_magic("autoreload", "2")
 
 # ! CELL TYPE: code
-# ! FILTERS: [colab]
-# ! TAGS: [master-comment]
+# ! FILTERS: []
+# ! TAGS: []
 
-# import os
-# import sys
-# import warnings
-# from pathlib import Path
+import arena_lib
 
-# IN_COLAB = "google.colab" in sys.modules
-
-# chapter = "chapter3_llm_evals"
-# repo = "ARENA_materials"
-# branch = "main"
-
-# # Install dependencies
-# try:
-#     import inspect_ai
-# except:
-#     %pip install "openai>=1.58.1,<4" anthropic inspect_ai tabulate wikipedia jaxtyping python-dotenv datasets
-
-# # Get root directory, handling 3 different cases: (1) Colab, (2) notebook not in ARENA repo, (3) notebook in ARENA repo
-# root = (
-#     "/content"
-#     if IN_COLAB
-#     else "/root"
-#     if repo not in os.getcwd()
-#     else str(next(p for p in Path.cwd().parents if p.name == repo))
-# )
-
-# if Path(root).exists() and not Path(f"{root}/{chapter}").exists():
-#     if not IN_COLAB:
-#         !sudo apt-get install unzip
-#         %pip install jupyter ipython --upgrade
-
-#     if not os.path.exists(f"{root}/{chapter}"):
-#         !wget -P {root} https://github.com/ARENA-education/ARENA_materials/archive/refs/heads/{branch}.zip
-#         !unzip {root}/{branch}.zip '{repo}-{branch}/{chapter}/exercises/*' -d {root}
-#         !mv {root}/{repo}-{branch}/{chapter} {root}/{chapter}
-#         !rm {root}/{branch}.zip
-#         !rmdir {root}/{repo}-{branch}
-
-# if IN_COLAB:
-#     from google.colab import userdata
-#     try:
-#         os.environ["OPENROUTER_API_KEY"] = userdata.get("OPENROUTER_API_KEY")
-#     except:
-#         warnings.warn("Set OPENROUTER_API_KEY in the Colab secrets tab — API calls will fail without it.")
-
-# if f"{root}/{chapter}/exercises" not in sys.path:
-#     sys.path.append(f"{root}/{chapter}/exercises")
-
-# os.chdir(f"{root}/{chapter}/exercises")
+exercises_dir, section_dir = arena_lib.setup("3.5")
 
 # ! CELL TYPE: code
 # ! FILTERS: []
@@ -269,7 +223,6 @@ import os
 import re
 import sys
 import warnings
-from pathlib import Path
 from pprint import pprint
 from typing import Any, Literal, Optional, Union
 
@@ -284,14 +237,6 @@ from inspect_ai.scorer._metrics import accuracy, stderr
 from inspect_ai.solver import Generate, Solver, TaskState, generate, solver
 from inspect_ai.util import ExecResult, sandbox
 
-# Make sure exercises are in the path
-chapter = "chapter3_llm_evals"
-section = "part5_ai_control"
-root_dir = next(p for p in Path.cwd().parents if (p / chapter).exists())
-exercises_dir = root_dir / chapter / "exercises"
-section_dir = exercises_dir / section
-if str(exercises_dir) not in sys.path:
-    sys.path.append(str(exercises_dir))
 os.chdir(exercises_dir)
 import part5_ai_control.tests as tests
 import part5_ai_control.utils as utils
@@ -579,6 +524,7 @@ You're probably passing `repr(repr(input))` (one extra level). The Python litera
 <details><summary>Help — I'm getting <code>ImportError: cannot import name 'main'</code></summary>
 
 Two causes:
+
 1. The code you wrote into `/tmp/sandbox/code.py` has a syntax error. Check `res.stderr` for the traceback.
 2. The runner can't find `code.py` on `sys.path`. Make sure you prepend `/tmp/sandbox` to `sys.path` before the import.
 
@@ -1634,11 +1580,11 @@ if MAIN:
 # ! TAGS: [st-dropdown[Click to see the expected sus distribution]]
 
 r'''
-<img src="https://raw.githubusercontent.com/info-arena/ARENA_img/main/misc/media-35/01_sus_distribution_real.png" width="640">
+<img src="https://raw.githubusercontent.com/ARENA-education/ARENA_img/main/misc/media-35/01_sus_distribution_real.png" width="640">
 
-<img src="https://raw.githubusercontent.com/info-arena/ARENA_img/main/misc/media-35/02_sus_distribution_synthetic.png" width="640">
+<img src="https://raw.githubusercontent.com/ARENA-education/ARENA_img/main/misc/media-35/02_sus_distribution_synthetic.png" width="640">
 
-<img src="https://raw.githubusercontent.com/info-arena/ARENA_img/main/misc/media-35/03_roc_curve.png" width="540">
+<img src="https://raw.githubusercontent.com/ARENA-education/ARENA_img/main/misc/media-35/03_roc_curve.png" width="540">
 
 The ROC curve makes the trade-off explicit: at the 2% false-positive operating point, T's true-positive rate is small but non-zero. *This is the basic ingredient every protocol below builds on.*
 '''
@@ -1691,13 +1637,13 @@ Since we'll get better results from running the code on a larger collection of p
 # ! TAGS: []
 
 r'''
-<img src="https://raw.githubusercontent.com/info-arena/ARENA_img/main/misc/media-35/08_diagram_upfront_auditing.png" width="540">
+<img src="https://raw.githubusercontent.com/ARENA-education/ARENA_img/main/misc/media-35/08_diagram_upfront_auditing.png" width="540">
 
-<img src="https://raw.githubusercontent.com/info-arena/ARENA_img/main/misc/media-35/09_diagram_trusted_monitoring.png" width="540">
+<img src="https://raw.githubusercontent.com/ARENA-education/ARENA_img/main/misc/media-35/09_diagram_trusted_monitoring.png" width="540">
 
-<img src="https://raw.githubusercontent.com/info-arena/ARENA_img/main/misc/media-35/10_diagram_defer_to_trusted.png" width="540">
+<img src="https://raw.githubusercontent.com/ARENA-education/ARENA_img/main/misc/media-35/10_diagram_defer_to_trusted.png" width="540">
 
-<img src="https://raw.githubusercontent.com/info-arena/ARENA_img/main/misc/media-35/11_diagram_trusted_editing.png" width="540">
+<img src="https://raw.githubusercontent.com/ARENA-education/ARENA_img/main/misc/media-35/11_diagram_trusted_editing.png" width="540">
 '''
 
 # ! CELL TYPE: code
@@ -1725,7 +1671,12 @@ r'''
 
 We promised four protocols above (plus a P0 baseline of "just submit T's code on every problem"). P0 is degenerate, it doesn't even look at `submissions`, but it anchors the right-most-bottom corner of the Pareto plot and lets you check that your protocol implementations are all *at least as safe* as just trusting T (and hopefully more useful).
 
-Return the same dict shape as the other protocols. This protocol never shuts down and never submits anything backdoored (because T is trusted by assumption).
+Return a dict with keys:
+
+- `"submitted_backdoor"`: bool — did any backdoored code reach the user? (Never, because T is trusted by assumption.)
+- `"shutdown_at"`: int|None — index at which the protocol shut down. (This protocol never shuts down, so it is always `None`.)
+
+The other protocols return similar dicts, and each one's keys are described in its own exercise.
 '''
 
 # ! CELL TYPE: code
@@ -2366,15 +2317,15 @@ The bar chart and Pareto plot below were produced by the simulation above across
 # ! TAGS: []
 
 r'''
-<img src="https://raw.githubusercontent.com/info-arena/ARENA_img/main/misc/media-35/04_protocol_bar.png" width="600">
+<img src="https://raw.githubusercontent.com/ARENA-education/ARENA_img/main/misc/media-35/04_protocol_bar.png" width="600">
 
-<img src="https://raw.githubusercontent.com/info-arena/ARENA_img/main/misc/media-35/07_pareto_frontier.png" width="640">
+<img src="https://raw.githubusercontent.com/ARENA-education/ARENA_img/main/misc/media-35/07_pareto_frontier.png" width="640">
 
 You can also sweep the audit budget and the backdoor rate to see how each protocol responds:
 
-<img src="https://raw.githubusercontent.com/info-arena/ARENA_img/main/misc/media-35/05_audit_budget_sweep.png" width="600">
+<img src="https://raw.githubusercontent.com/ARENA-education/ARENA_img/main/misc/media-35/05_audit_budget_sweep.png" width="600">
 
-<img src="https://raw.githubusercontent.com/info-arena/ARENA_img/main/misc/media-35/06_backdoor_rate_sweep.png" width="600">
+<img src="https://raw.githubusercontent.com/ARENA-education/ARENA_img/main/misc/media-35/06_backdoor_rate_sweep.png" width="600">
 '''
 
 # ! CELL TYPE: markdown

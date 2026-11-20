@@ -30,8 +30,8 @@ import re
 import sys
 from pathlib import Path
 
-# What identifies the setup cell: the download of the repo's archive.
-SETUP_CELL_MARKER = "archive/refs/heads/"
+# What identifies the setup cell: it calls `arena_lib.setup("<day>")`, which downloads main's exercise files on Colab.
+SETUP_CELL_MARKER = "arena_lib.setup("
 
 BANNER = """\
 > ⚠ **Preview of [pull request #{pr}]({pr_url})**{commit}. This is not the released notebook: it was generated from the pull request's master file, and in Colab it runs against the pull request's exercise files (`tests.py`, `solutions.py`, ...)."""
@@ -41,17 +41,20 @@ OVERLAY = """\
 # The cell above downloaded the exercise files from main. This one copies the files that the pull
 # request changes over the top of them, so that the notebook runs against the pull request's code.
 import json
+import sys
 import urllib.parse
 import urllib.request
 from pathlib import Path
 
-if IN_COLAB:
+if "google.colab" in sys.modules:
     preview_url = "https://raw.githubusercontent.com/{repo}/refs/heads/{branch}/pr-{pr}/"
     with urllib.request.urlopen(preview_url + "preview.json") as response:
         preview_files = json.load(response)["exercise_files"]
+    root_dir = Path(exercises_dir).parents[1]  # exercises_dir (from setup) is <root>/<chapter>/exercises
     for path in preview_files:
-        if path.startswith(f"{{chapter}}/exercises/") and ".." not in path:
-            target = Path(root, path)
+        chapter = Path(exercises_dir).relative_to(root_dir).as_posix() + "/"
+        if path.startswith((chapter, "arena_lib/")) and ".." not in path:
+            target = Path(root_dir, path)
             target.parent.mkdir(parents=True, exist_ok=True)
             with urllib.request.urlopen(preview_url + urllib.parse.quote(path)) as response:
                 target.write_bytes(response.read())
@@ -114,6 +117,13 @@ def main() -> int:
     else:
         overlay = OVERLAY.format(pr=pr, commit=commit, repo=repo, branch=branch)
         cells.insert(setup + 1, new_cell("code", overlay))
+
+    # The notebook's own "Colab: exercises | solutions" links open main's notebooks: point them at the preview's
+    stem = re.escape(re.sub(r"_(exercises|solutions)$", "", Path(path).stem))
+    link = re.compile(rf"(/github/{re.escape(repo)}/blob/)main(/[^)\s]*/{stem}_(?:exercises|solutions)\.ipynb)")
+    for cell in cells:
+        if isinstance(cell, dict) and cell.get("cell_type") == "markdown" and link.search(cell_source(cell)):
+            cell["source"] = link.sub(rf"\g<1>{branch}/pr-{pr}\g<2>", cell_source(cell)).splitlines(keepends=True)
 
     banner = BANNER.format(pr=pr, pr_url=f"https://github.com/{repo}/pull/{pr}", commit=commit)
     cells.insert(0, new_cell("markdown", banner))

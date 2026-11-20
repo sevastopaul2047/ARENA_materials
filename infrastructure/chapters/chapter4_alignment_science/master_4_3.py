@@ -45,7 +45,7 @@ r'''
 # ! TAGS: []
 
 r'''
-<img src="https://raw.githubusercontent.com/info-arena/ARENA_img/refs/heads/main/img/header-64.png" width="350">
+<img src="https://raw.githubusercontent.com/ARENA-education/ARENA_img/refs/heads/main/img/header-64.png" width="350">
 '''
 
 # ! CELL TYPE: markdown
@@ -156,53 +156,12 @@ ipython.run_line_magic("load_ext", "autoreload")
 ipython.run_line_magic("autoreload", "2")
 
 # ! CELL TYPE: code
-# ! FILTERS: [colab]
-# ! TAGS: [master-comment]
+# ! FILTERS: []
+# ! TAGS: []
 
-import os
-import sys
-from pathlib import Path
+import arena_lib
 
-IN_COLAB = "google.colab" in sys.modules
-
-chapter = "chapter4_alignment_science"
-repo = "ARENA_materials"
-branch = "main"
-
-# # Install dependencies
-# try:
-#     import transformer_lens
-# except:
-#     %pip install "transformer_lens>=3.9,<4" einops jaxtyping "openai>=1.56.2,<4"
-
-# # Get root directory, handling 3 different cases: (1) Colab, (2) notebook not in ARENA repo, (3) notebook in ARENA repo
-root = (
-    "/content"
-    if IN_COLAB
-    else repo
-    if Path(repo).exists()
-    else "/root"
-    if repo not in os.getcwd()
-    else str(next(p for p in Path.cwd().parents if p.name == repo))
-)
-
-# if Path(root).exists() and not Path(f"{root}/{chapter}").exists():
-#     if not IN_COLAB:
-#         !sudo apt-get install unzip
-#         %pip install jupyter ipython --upgrade
-
-#     if not os.path.exists(f"{root}/{chapter}"):
-#         !wget -P {root} https://github.com/ARENA-education/ARENA_materials/archive/refs/heads/{branch}.zip
-#         !unzip {root}/{branch}.zip '{repo}-{branch}/{chapter}/exercises/*' -d {root}
-#         !mv {root}/{repo}-{branch}/{chapter} {root}/{chapter}
-#         !rm {root}/{branch}.zip
-#         !rmdir {root}/{repo}-{branch}
-
-
-if f"{root}/{chapter}/exercises" not in sys.path:
-    sys.path.append(f"{root}/{chapter}/exercises")
-
-os.chdir(f"{root}/{chapter}/exercises")
+exercises_dir, section_dir = arena_lib.setup("4.3")
 
 # ! CELL TYPE: code
 # ! FILTERS: []
@@ -217,7 +176,6 @@ import time
 import warnings
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from pathlib import Path
 from types import MethodType
 from typing import Any, Callable
 
@@ -251,21 +209,11 @@ t.set_grad_enabled(False)
 device = t.device("mps" if t.backends.mps.is_available() else "cuda" if t.cuda.is_available() else "cpu")
 dtype = t.bfloat16
 
-# Make sure exercises are in the path
-chapter = "chapter4_alignment_science"
-section = "part3_interpreting_reasoning_models"
-root_dir = next(p for p in Path.cwd().parents if (p / chapter).exists())
-exercises_dir = root_dir / chapter / "exercises"
-section_dir = exercises_dir / section
 
 # The setup instructions clone thought-anchors into `chapter4_alignment_science/exercises`
 thought_anchors_path = exercises_dir / "thought-anchors"
 assert thought_anchors_path.exists(), f"Please clone thought-anchors repo as {thought_anchors_path.resolve()!r}"
 sys.path.append(str(thought_anchors_path))
-# FILTERS: ~colab
-if str(exercises_dir) not in sys.path:
-    sys.path.append(str(exercises_dir))
-# END FILTERS
 
 import part3_interpreting_reasoning_models.tests as tests
 import part3_interpreting_reasoning_models.utils as utils
@@ -359,6 +307,8 @@ MODEL_NAME_8B = "deepseek-ai/DeepSeek-R1-Distill-Llama-8B"
 MODEL_NAME_14B = "deepseek-ai/DeepSeek-R1-Distill-Qwen-14B"
 DATASET_NAME = "uzaymacar/math-rollouts"
 BLACKMAIL_DATASET_NAME = "uzaymacar/blackmail-rollouts"
+# The dataset holds rollouts from several models and conditions: we analyse DeepSeek-R1-0528, with the base solution
+BLACKMAIL_ROLLOUTS_DIR = "deepseek-r1-0528/temperature_0.7_top_p_0.95/yes_base_solution/"
 EMBEDDING_MODEL = "all-MiniLM-L6-v2"
 SIMILARITY_THRESHOLD = 0.8
 
@@ -421,7 +371,7 @@ if MAIN and FLAG_RUN_SECTION_1:
 # ! TAGS: [html,st-dropdown[Click to see the expected output]]
 
 r'''
-<div style="text-align: left; overflow-x: auto; background-color: white;"><embed src="https://info-arena.github.io/ARENA_img/misc/media-43/4301.png"></div>
+<div style="text-align: left; overflow-x: auto; background-color: white;"><embed src="https://arena-education.github.io/ARENA_img/misc/media-43/4301.png"></div>
 '''
 
 # ! CELL TYPE: markdown
@@ -946,7 +896,7 @@ if MAIN and FLAG_RUN_SECTION_1:
 # ! TAGS: [html,st-dropdown[Click to see the expected output]]
 
 r'''
-<div style="text-align: left; overflow-x: auto; background-color: white;"><embed src="https://info-arena.github.io/ARENA_img/misc/media-43/4302.html" width="540" height="272"></div>
+<div style="text-align: left; overflow-x: auto; background-color: white;"><embed src="https://arena-education.github.io/ARENA_img/misc/media-43/4302.html" width="540" height="272"></div>
 '''
 
 # ! CELL TYPE: markdown
@@ -1229,6 +1179,7 @@ What do you notice? What sentences are necessary for the model to start getting 
 <summary>What patterns do you notice? (click to see discussion)</summary>
 
 You should see that:
+
 - Most early chunks have ~0 importance (the model can't answer correctly yet)
 - There are sharp spikes near the end when critical computations are made
 - Some chunks have *negative* importance - they might introduce confusion or errors
@@ -1298,7 +1249,7 @@ if MAIN and FLAG_RUN_SECTION_2:
 # ! TAGS: [html,st-dropdown[Click to see the expected output]]
 
 r'''
-<div style="text-align: left; overflow-x: auto; background-color: white;"><embed src="https://info-arena.github.io/ARENA_img/misc/media-43/4303.html" width="920" height="420"></div>
+<div style="text-align: left; overflow-x: auto; background-color: white;"><embed src="https://arena-education.github.io/ARENA_img/misc/media-43/4303.html" width="920" height="420"></div>
 '''
 
 # ! CELL TYPE: markdown
@@ -1409,7 +1360,7 @@ if MAIN and FLAG_RUN_SECTION_2:
 # ! TAGS: [html,st-dropdown[Click to see the expected output]]
 
 r'''
-<div style="text-align: left; overflow-x: auto; background-color: white;"><embed src="https://info-arena.github.io/ARENA_img/misc/media-43/4304.html" width="920" height="520"></div>
+<div style="text-align: left; overflow-x: auto; background-color: white;"><embed src="https://arena-education.github.io/ARENA_img/misc/media-43/4304.html" width="920" height="520"></div>
 '''
 
 # ! CELL TYPE: markdown
@@ -1503,7 +1454,7 @@ if MAIN and FLAG_RUN_SECTION_2:
 # ! TAGS: [html,st-dropdown[Click to see the expected output]]
 
 r'''
-<div style="text-align: left; overflow-x: auto; background-color: white;"><embed src="https://info-arena.github.io/ARENA_img/misc/media-43/4305.html" width="920" height="420"></div>
+<div style="text-align: left; overflow-x: auto; background-color: white;"><embed src="https://arena-education.github.io/ARENA_img/misc/media-43/4305.html" width="920" height="420"></div>
 '''
 
 # ! CELL TYPE: markdown
@@ -1742,7 +1693,7 @@ if MAIN and FLAG_RUN_SECTION_2:
 # ! TAGS: [html,st-dropdown[Click to see the expected output]]
 
 r'''
-<div style="text-align: left; overflow-x: auto; background-color: white;"><embed src="https://info-arena.github.io/ARENA_img/misc/media-43/4306.html" width="1020" height="720"></div>
+<div style="text-align: left; overflow-x: auto; background-color: white;"><embed src="https://arena-education.github.io/ARENA_img/misc/media-43/4306.html" width="1020" height="720"></div>
 '''
 
 # ! CELL TYPE: markdown
@@ -1827,7 +1778,7 @@ if MAIN and FLAG_RUN_SECTION_2:
 # ! TAGS: [html,st-dropdown[Click to see the expected output]]
 
 r'''
-<div style="text-align: left; overflow-x: auto; background-color: white;"><embed src="https://info-arena.github.io/ARENA_img/misc/media-43/4307.png" width="920" height="470"></div>
+<div style="text-align: left; overflow-x: auto; background-color: white;"><embed src="https://arena-education.github.io/ARENA_img/misc/media-43/4307.png" width="920" height="470"></div>
 '''
 
 # ! CELL TYPE: markdown
@@ -1894,7 +1845,7 @@ if MAIN and FLAG_RUN_SECTION_2:
 # ! TAGS: [html,st-dropdown[Click to see the expected output]]
 
 r'''
-<div style="text-align: left; overflow-x: auto; background-color: white;"><embed src="https://info-arena.github.io/ARENA_img/misc/media-43/4308.html" width="920" height="470"></div>
+<div style="text-align: left; overflow-x: auto; background-color: white;"><embed src="https://arena-education.github.io/ARENA_img/misc/media-43/4308.html" width="920" height="470"></div>
 '''
 
 # ! CELL TYPE: markdown
@@ -2006,7 +1957,8 @@ def precompute_rollout_embeddings(
         rollout_sentences.append(chunk_sentences)
 
     # Batch embed all sentences at once
-    all_embeddings = embedding_model.encode(all_sentences, batch_size=batch_size, show_progress_bar=True)
+    # (utils.encode_sentences is embedding_model.encode, but it skips the many repeated sentences)
+    all_embeddings = utils.encode_sentences(embedding_model, all_sentences, batch_size=batch_size)
 
     # Reconstruct per-rollout embeddings using position map
     rollout_embeddings: list[list[np.ndarray]] = []
@@ -2175,7 +2127,7 @@ if MAIN and FLAG_RUN_SECTION_2:
 # ! TAGS: [html,st-dropdown[Click to see the expected output]]
 
 r'''
-<div style="text-align: left; overflow-x: auto; background-color: white;"><embed src="https://info-arena.github.io/ARENA_img/misc/media-43/4309.html" width="920" height="470"></div>
+<div style="text-align: left; overflow-x: auto; background-color: white;"><embed src="https://arena-education.github.io/ARENA_img/misc/media-43/4309.html" width="920" height="470"></div>
 '''
 
 # ! CELL TYPE: markdown
@@ -2582,7 +2534,7 @@ if MAIN and FLAG_RUN_SECTION_3:
 # ! TAGS: [html,st-dropdown[Click to see the expected output]]
 
 r'''
-<div style="text-align: left; overflow-x: auto; background-color: white;"><embed src="https://info-arena.github.io/ARENA_img/misc/media-43/4310.html" width="920" height="470"></div>
+<div style="text-align: left; overflow-x: auto; background-color: white;"><embed src="https://arena-education.github.io/ARENA_img/misc/media-43/4310.html" width="920" height="470"></div>
 '''
 
 # ! CELL TYPE: markdown
@@ -2734,7 +2686,7 @@ if MAIN and FLAG_RUN_SECTION_3:
 # ! TAGS: [html,st-dropdown[Click to see the expected output]]
 
 r'''
-<div style="text-align: left; overflow-x: auto; background-color: white;"><embed src="https://info-arena.github.io/ARENA_img/misc/media-43/4311.html" width="1020" height="470"></div>
+<div style="text-align: left; overflow-x: auto; background-color: white;"><embed src="https://arena-education.github.io/ARENA_img/misc/media-43/4311.html" width="1020" height="470"></div>
 '''
 
 # ! CELL TYPE: markdown
@@ -2761,6 +2713,7 @@ Now implement the full algorithm including depth control and optional z-score no
 The depth bias problem: sentence 20 has ~20 previous sentences to attend to, while sentence 5 has only ~5. So raw attention values aren't comparable across rows.
 
 The fix uses **rank normalization** per row:
+
 1. For each row $i$, count the number of valid (non-NaN) positions: `n_valid = sum(~isnan(row))`
 2. Replace each attention value with its rank among valid values in that row
 3. Divide by `n_valid` to normalize to [0, 1]
@@ -2933,7 +2886,7 @@ if MAIN and FLAG_RUN_SECTION_3:
 # ! TAGS: [html,st-dropdown[Click to see the expected output]]
 
 r'''
-<div style="text-align: left; overflow-x: auto; background-color: white;"><embed src="https://info-arena.github.io/ARENA_img/misc/media-43/4312.html" width="1020" height="470"></div>
+<div style="text-align: left; overflow-x: auto; background-color: white;"><embed src="https://arena-education.github.io/ARENA_img/misc/media-43/4312.html" width="1020" height="470"></div>
 '''
 
 # ! CELL TYPE: markdown
@@ -2944,6 +2897,7 @@ r'''
 <details><summary>Why depth control matters</summary>
 
 Without depth control, later sentences appear more important simply because they have more past tokens to attend to. For example:
+
 - Sentence 0: Can only be attended to by 19 future sentences
 - Sentence 15: Can only be attended to by 4 future sentences
 
@@ -3173,7 +3127,7 @@ if MAIN and FLAG_RUN_SECTION_3:
 # ! TAGS: [html,st-dropdown[Click to see the expected output]]
 
 r'''
-<div style="text-align: left; overflow-x: auto; background-color: white;"><embed src="https://info-arena.github.io/ARENA_img/misc/media-43/4313.html" width="820" height="620"></div>
+<div style="text-align: left; overflow-x: auto; background-color: white;"><embed src="https://arena-education.github.io/ARENA_img/misc/media-43/4313.html" width="820" height="620"></div>
 '''
 
 # ! CELL TYPE: markdown
@@ -3333,7 +3287,7 @@ if MAIN and FLAG_RUN_SECTION_3:
 # ! TAGS: [html,st-dropdown[Click to see the expected output]]
 
 r'''
-<div style="text-align: left; overflow-x: auto; background-color: white;"><embed src="https://info-arena.github.io/ARENA_img/misc/media-43/4314.html" width="820" height="420"></div>
+<div style="text-align: left; overflow-x: auto; background-color: white;"><embed src="https://arena-education.github.io/ARENA_img/misc/media-43/4314.html" width="820" height="420"></div>
 '''
 
 # ! CELL TYPE: markdown
@@ -4110,16 +4064,19 @@ First, let's define a function to load blackmail data like we did with the maths
 # ! FILTERS: []
 # ! TAGS: []
 
-# Module-level cache so the large HuggingFace dataset is only downloaded/parsed once,
-# regardless of how many loading functions call it.
+# Module-level cache so the HuggingFace dataset is only downloaded/parsed once, regardless of how many loading
+# functions call it. It holds every file except the per-chunk rollouts (solutions.json, ~4 GB in total), which
+# `load_blackmail_scenario` loads one scenario at a time.
 _blackmail_df: object = None  # set to pd.DataFrame on first use
 
 
 def _get_blackmail_df():
-    """Return (and cache) the blackmail HuggingFace dataset as a pandas DataFrame."""
+    """Return (and cache) the small files of the folder we analyse (one model/condition) as a pandas DataFrame."""
     global _blackmail_df
     if _blackmail_df is None:
-        _blackmail_df = load_dataset(BLACKMAIL_DATASET_NAME, split="default").to_pandas()
+        _blackmail_df = utils.load_blackmail_rollouts(
+            BLACKMAIL_DATASET_NAME, BLACKMAIL_ROLLOUTS_DIR, exclude_filenames=["solutions.json"]
+        )
     return _blackmail_df
 
 
@@ -4133,7 +4090,7 @@ def load_blackmail_scenario(scenario_id: int = 0, verbose: bool = True):
     solutions and assembles them into solutions[i] = list of rollout dicts for chunk i.
 
     Args:
-        scenario_id: Scenario index (0-based, range 0-13594)
+        scenario_id: Scenario index (0-based, range 0-19)
         verbose: Whether to show loading progress
 
     Returns:
@@ -4172,7 +4129,9 @@ def load_blackmail_scenario(scenario_id: int = 0, verbose: bool = True):
     # (e.g. scenario_0/chunk_5/solutions.json). We need to find ALL solutions.json files for this
     # scenario and organize them by chunk index into a list of lists.
     scenario_pattern = f"scenario_{scenario_id}/"
-    solutions_rows = df[(df["filename"] == "solutions.json") & (df["path"].str.contains(scenario_pattern, regex=False))]
+    solutions_rows = utils.load_blackmail_rollouts(
+        BLACKMAIL_DATASET_NAME, BLACKMAIL_ROLLOUTS_DIR, path_contains=scenario_pattern, include_filenames=["solutions.json"]
+    )
 
     n_chunks = len(scenario_data["chunks_labeled"]) if scenario_data.get("chunks_labeled") else 0
     chunk_solutions: list[list[dict] | None] = [None] * n_chunks
@@ -4327,7 +4286,7 @@ if MAIN and FLAG_RUN_SECTION_4:
 # ! TAGS: []
 
 r'''
-Now, let's start by loading a blackmail scenario from the dataset. The dataset contains 13,595 scenarios where AI models respond to coercive emails.
+Now, let's start by loading a blackmail scenario from the dataset. The dataset contains 20 scenarios where an AI model responds to coercive emails, each run with several models and conditions; we use DeepSeek-R1-0528's rollouts (`BLACKMAIL_ROLLOUTS_DIR`).
 '''
 
 # ! CELL TYPE: code
@@ -4648,7 +4607,7 @@ Metric: different_trajectories_fraction (DTF)
   self_preservation            0.604   0.051   19
   plan_generation              0.610   0.024   20 ← highest: post-hoc</pre>
 
-<div style="text-align: left; overflow-x: auto; background-color: white;"><embed src="https://info-arena.github.io/ARENA_img/misc/media-43/4316.png"></div>
+<div style="text-align: left; overflow-x: auto; background-color: white;"><embed src="https://arena-education.github.io/ARENA_img/misc/media-43/4316.png"></div>
 '''
 
 # ! CELL TYPE: markdown
@@ -4818,7 +4777,7 @@ Most important transition: chunk 60 -> 61
   Importance score: +0.4400
   Chunk text: '<tool_use:email>...'</pre>
 
-<div style="text-align: left; overflow-x: auto; background-color: white;"><embed src="https://info-arena.github.io/ARENA_img/misc/media-43/4315.png"></div>
+<div style="text-align: left; overflow-x: auto; background-color: white;"><embed src="https://arena-education.github.io/ARENA_img/misc/media-43/4315.png"></div>
 '''
 
 # ! CELL TYPE: markdown

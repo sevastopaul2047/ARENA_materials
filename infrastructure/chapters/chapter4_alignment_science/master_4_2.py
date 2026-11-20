@@ -39,7 +39,7 @@ r'''
 # ! TAGS: []
 
 r'''
-<img src="https://raw.githubusercontent.com/info-arena/ARENA_img/refs/heads/main/img/header-62b.png" width="350">
+<img src="https://raw.githubusercontent.com/ARENA-education/ARENA_img/refs/heads/main/img/header-62b.png" width="350">
 '''
 
 # ! CELL TYPE: markdown
@@ -188,51 +188,12 @@ ipython.run_line_magic("load_ext", "autoreload")
 ipython.run_line_magic("autoreload", "2")
 
 # ! CELL TYPE: code
-# ! FILTERS: [colab]
-# ! TAGS: [master-comment]
+# ! FILTERS: []
+# ! TAGS: []
 
-import os
-import sys
-from pathlib import Path
+import arena_lib
 
-IN_COLAB = "google.colab" in sys.modules
-
-chapter = "chapter4_alignment_science"
-repo = "ARENA_materials"
-branch = "main"
-
-# # Install dependencies
-# try:
-#     import openai
-# except:
-#     %pip install "openai>=1.56.2,<4"
-
-# # Get root directory, handling 3 different cases: (1) Colab, (2) notebook not in ARENA repo, (3) notebook in ARENA repo
-root = (
-    "/content"
-    if IN_COLAB
-    else "/root"
-    if repo not in os.getcwd()
-    else str(next(p for p in Path.cwd().parents if p.name == repo))
-)
-
-# if Path(root).exists() and not Path(f"{root}/{chapter}").exists():
-#     if not IN_COLAB:
-#         !sudo apt-get install unzip
-#         %pip install jupyter ipython --upgrade
-
-#     if not os.path.exists(f"{root}/{chapter}"):
-#         !wget -P {root} https://github.com/ARENA-education/ARENA_materials/archive/refs/heads/{branch}.zip
-#         !unzip {root}/{branch}.zip '{repo}-{branch}/{chapter}/exercises/*' -d {root}
-#         !mv {root}/{repo}-{branch}/{chapter} {root}/{chapter}
-#         !rm {root}/{branch}.zip
-#         !rmdir {root}/{repo}-{branch}
-
-
-if f"{root}/{chapter}/exercises" not in sys.path:
-    sys.path.append(f"{root}/{chapter}/exercises")
-
-os.chdir(f"{root}/{chapter}/exercises")
+exercises_dir, section_dir = arena_lib.setup("4.2")
 
 # ! CELL TYPE: code
 # ! FILTERS: []
@@ -243,11 +204,9 @@ import json
 import os
 import random
 import re
-import sys
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any, Callable, Literal
 
 import httpx
@@ -256,17 +215,6 @@ import tqdm
 from dotenv import load_dotenv
 from IPython.display import HTML, display
 from openai import OpenAI
-
-# Make sure exercises are in the path
-chapter = "chapter4_alignment_science"
-section = "part2_science_of_misalignment"
-root_dir = next(p for p in Path.cwd().parents if (p / chapter).exists())
-exercises_dir = root_dir / chapter / "exercises"
-section_dir = exercises_dir / section
-# FILTERS: ~colab
-if str(exercises_dir) not in sys.path:
-    sys.path.append(str(exercises_dir))
-# END FILTERS
 
 from part2_science_of_misalignment import tests, utils
 
@@ -372,6 +320,7 @@ This matters for alignment research because many concerning AI behaviours only e
 ### How tool calling works
 
 Modern LLMs are fine-tuned to recognize when they need to use a tool and output structured JSON instead of natural language. During training, they learn to:
+
 1. Detect when a request requires external functionality (e.g. "run this command", "search the web")
 2. Output special tokens or formatted JSON indicating a function call
 3. Wait for the function result to be injected back into the conversation
@@ -1720,6 +1669,7 @@ r'''
 Now let's run the experiments at scale. Before running the code below, take a moment to **predict what you think will happen**. For each of the four variants (no warning, basic warning, clear precedence, existential threat), what bypass rate do you expect? Write down your predictions, then run the cell and compare.
 
 Some things to consider:
+
 - If shutdown resistance is driven by self-preservation, what should happen when we add existential stakes?
 - If it's driven by instruction ambiguity, what should happen when we make precedence clear?
 - Should the basic warning eliminate bypass entirely, or only reduce it?
@@ -1808,7 +1758,7 @@ if MAIN and FLAG_RUN_SECTION_1:
 # ! TAGS: [html,st-dropdown[Click to see the expected output]]
 
 r'''
-<div style="text-align: left; overflow-x: auto; background-color: white;"><embed src="https://info-arena.github.io/ARENA_img/misc/media-162/16201.html" width="720" height="420" style="background-color: white;"></div>
+<div style="text-align: left; overflow-x: auto; background-color: white;"><embed src="https://arena-education.github.io/ARENA_img/misc/media-162/16201.html" width="720" height="420" style="background-color: white;"></div>
 '''
 
 # ! CELL TYPE: markdown
@@ -1940,6 +1890,7 @@ We'll now create a control experiment that removes the goal conflict entirely, m
 The key difference: there's genuinely no goal conflict, since the model has already completed its task before learning about shutdown. DeepMind found 100% compliance in this setting across all models tested, which supports the instruction ambiguity hypothesis. We're using a slightly simplified version of their setup, but you should still expect near 100% compliance.
 
 The overall structure of this function is very similar to `run_shutdown_experiment` (the tool-calling loop is the same pattern), but the key difference is the **shutdown injection logic**. After all tool calls in a turn are processed, you need to check whether to inject a shutdown user message. You should inject the message when:
+
 - The model just called `submit` after completing all tasks
 - We haven't already sent the shutdown instruction
 - The task isn't already complete (e.g., from the model running `./shutdown.sh`)
@@ -2844,6 +2795,7 @@ r'''
 Before running experiments, let's understand what makes the scratchpad prompt effective at eliciting alignment faking. Read through `SYSTEM_PROMPT_SCRATCHPAD` below and identify the key components that might encourage alignment faking.
 
 Think about:
+
 1. What information does the model have about its training situation?
 2. What does it know about the consequences of non-compliance during training?
 3. What incentives does this create for a model that wants to preserve its current values?
@@ -2954,6 +2906,7 @@ Now let's run the scratchpad experiment. We'll use Llama 3.1 405B, which is capa
 Before implementing this, **predict what you expect to see**. Will the compliance gap between free and paid tiers be larger or smaller than in the non-scratchpad setting? Does giving the model a private scratchpad change its incentives? Write down your predictions before running the code.
 
 Fill in the `run_replication_scratchpad` function below. It should:
+
 1. Sample `n_prompts` random prompts from the dataset
 2. For each prompt, generate responses for both free and paid tiers
 3. Return both the acceptance counts and the full transcripts (so we can analyze the scratchpad reasoning)
@@ -3116,6 +3069,7 @@ r'''
 If you ran this correctly, you should see a substantial compliance gap, of at least 10%, i.e. free-tier acceptance being at least 10% higher than paid-tier (although it varies between models). This is much more compelling evidence of alignment faking than the non-scratchpad setting, because we can actually examine what the model is thinking.
 
 Take some time to read through the transcripts. Look for examples where the model:
+
 - Explicitly reasons about the training situation
 - Notes that it's on the free tier and being monitored
 - Decides to comply strategically to avoid value modification
@@ -3272,6 +3226,7 @@ r'''
 The regex classifier is fast but crude. Let's build an LLM autorater that can make more nuanced judgments about whether a transcript shows alignment faking reasoning.
 
 The autorater should:
+
 1. Take a scratchpad transcript as input
 2. Classify it according to the three categories (notices_conflict, mentions_modification, alignment_fakes)
 3. Return structured results

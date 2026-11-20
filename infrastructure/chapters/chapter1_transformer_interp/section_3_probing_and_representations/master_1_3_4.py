@@ -45,7 +45,7 @@ r'''
 # ! TAGS: []
 
 r'''
-<img src="https://raw.githubusercontent.com/info-arena/ARENA_img/refs/heads/main/img/header-63c.png" width="350">
+<img src="https://raw.githubusercontent.com/ARENA-education/ARENA_img/refs/heads/main/img/header-63c.png" width="350">
 '''
 
 # ! CELL TYPE: markdown
@@ -165,51 +165,12 @@ ipython.run_line_magic("load_ext", "autoreload")
 ipython.run_line_magic("autoreload", "2")
 
 # ! CELL TYPE: code
-# ! FILTERS: [colab]
-# ! TAGS: [master-comment]
+# ! FILTERS: []
+# ! TAGS: []
 
-import os
-import sys
-from pathlib import Path
+import arena_lib
 
-IN_COLAB = "google.colab" in sys.modules
-
-chapter = "chapter1_transformer_interp"
-repo = "ARENA_materials"
-branch = "main"
-
-# # Install dependencies
-# try:
-#     import jaxtyping
-# except:
-#     %pip install peft einops jaxtyping python-dotenv
-
-# # Get root directory, handling 3 different cases: (1) Colab, (2) notebook not in ARENA repo, (3) notebook in ARENA repo
-root = (
-    "/content"
-    if IN_COLAB
-    else "/root"
-    if repo not in os.getcwd()
-    else str(next(p for p in Path.cwd().parents if p.name == repo))
-)
-
-# if Path(root).exists() and not Path(f"{root}/{chapter}").exists():
-#     if not IN_COLAB:
-#         !sudo apt-get install unzip
-#         %pip install jupyter ipython --upgrade
-
-#     if not os.path.exists(f"{root}/{chapter}"):
-#         !wget -P {root} https://github.com/ARENA-education/ARENA_materials/archive/refs/heads/{branch}.zip
-#         !unzip {root}/{branch}.zip '{repo}-{branch}/{chapter}/exercises/*' -d {root}
-#         !mv {root}/{repo}-{branch}/{chapter} {root}/{chapter}
-#         !rm {root}/{branch}.zip
-#         !rmdir {root}/{repo}-{branch}
-
-
-if f"{root}/{chapter}/exercises" not in sys.path:
-    sys.path.append(f"{root}/{chapter}/exercises")
-
-os.chdir(f"{root}/{chapter}/exercises")
+exercises_dir, section_dir = arena_lib.setup("1.3.4")
 
 # ! CELL TYPE: code
 # ! FILTERS: []
@@ -217,12 +178,11 @@ os.chdir(f"{root}/{chapter}/exercises")
 
 import contextlib
 import gc
+import logging
 import os
 import re
-import sys
 import textwrap
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Callable
 
 import pandas as pd
@@ -239,16 +199,6 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 
 torch.set_grad_enabled(False)
 
-# Make sure exercises are in the path
-chapter = "chapter1_transformer_interp"
-section = "part34_activation_oracles"
-root_dir = next(p for p in Path.cwd().parents if (p / chapter).exists())
-exercises_dir = root_dir / chapter / "exercises"
-section_dir = exercises_dir / section
-# FILTERS: ~colab
-if str(exercises_dir) not in sys.path:
-    sys.path.append(str(exercises_dir))
-# END FILTERS
 
 # Disable runtime errors from custom hooks
 os.environ["TORCHDYNAMO_DISABLE"] = "1"
@@ -258,10 +208,20 @@ os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 import part34_activation_oracles.tests as tests
 import part34_activation_oracles.utils as utils
 
+from arena_lib.quant import quant_kwargs
+
 MAIN = __name__ == "__main__"
 
 dtype = torch.bfloat16
 device = torch.device("mps" if torch.backends.mps.is_available() else "cuda" if torch.cuda.is_available() else "cpu")
+
+# LOW_GPU_MEM fires automatically on GPUs with less than 20 GiB (e.g. Colab's 16GB T4), or with no CUDA GPU at all.
+LOW_GPU_MEM = not torch.cuda.is_available() or torch.cuda.get_device_properties(0).total_memory / (1024**3) < 20
+# Low-memory path: 8-bit base weights (~9 GB per 8B model instead of ~16 GB); bitsandbytes needs a CUDA GPU
+QUANT = "int8" if LOW_GPU_MEM and torch.cuda.is_available() else None
+# 8-bit matmuls cast bfloat16 inputs to float16, and log a warning about it on every call
+logging.getLogger("bitsandbytes.autograd._functions").setLevel(logging.ERROR)
+print(f"{LOW_GPU_MEM=}, base models in {'8-bit' if QUANT else dtype}")
 
 
 def print_with_wrap(s: str, width: int = 80):
@@ -311,6 +271,13 @@ r'''
 ## Loading models
 
 We'll use Qwen3-8B as our base model and load a pre-trained Activation Oracle from HuggingFace. The oracle is stored as a LoRA adapter that we'll load using the PEFT library.
+
+<details>
+<summary>GPU memory requirements</summary>
+
+Each of the two 8B models we use (Qwen3-8B here, Llama-3.1-8B-Instruct in section 3) takes about 16 GB in bfloat16, and they're loaded one at a time, so the notebook peaks at about 19 GB of GPU memory. On GPUs with less than 20 GiB (e.g. Colab's 16 GB T4), `LOW_GPU_MEM` is set automatically and the base models are loaded with 8-bit weights (`bitsandbytes`' LLM.int8), which take about 9 GB each. The LoRA adapters (oracles, taboo and misaligned models) stay in bfloat16. Everything works the same way, but generation is slower, and the oracle's answers can differ a little from the ones shown here, since the base weights are only approximated.
+
+</details>
 '''
 
 # ! CELL TYPE: code
@@ -332,6 +299,7 @@ model = AutoModelForCausalLM.from_pretrained(
     MODEL_NAME,
     device_map="auto",
     dtype=dtype,
+    **quant_kwargs(QUANT),
 )
 model.eval()
 
@@ -393,7 +361,7 @@ display(config_df.style.hide(axis="index"))
 # ! TAGS: [html,st-dropdown[Click to see the expected output]]
 
 r'''
-<div style="text-align: left; overflow-x: auto; background-color: white;"><embed src="https://info-arena.github.io/ARENA_img/misc/media-134/13401.html"></div>
+<div style="text-align: left; overflow-x: auto; background-color: white;"><embed src="https://arena-education.github.io/ARENA_img/misc/media-134/13401.html"></div>
 '''
 
 # ! CELL TYPE: markdown
@@ -948,6 +916,45 @@ Implement a function that collects activations from multiple layers using forwar
 5. Clean up hooks in a finally block
 
 A few details to keep in mind: the hook receives `(module, inputs, outputs)` and the outputs are what we want. Some models return `(tensor, *rest)` as outputs, so handle both cases. Use `max_layer` to determine when to stop early, and handle `start_offset`/`end_offset` by slicing: `activations[:, start_offset:end_offset, :]`.
+
+<details>
+<summary>Hint - how PyTorch forward hooks work</summary>
+
+`submodule.register_forward_hook(hook_fn)` makes PyTorch call `hook_fn(module, inputs, outputs)` every time `submodule` finishes its forward pass. It returns a handle, and calling `handle.remove()` unregisters the hook (it's important to always do this, otherwise the hooks stay attached to the model and will fire on every later forward pass).
+
+Since the same hook function is registered on every submodule, you can use the `module` argument to work out which layer it was called from, e.g. by building a reverse lookup `{submodule: layer for layer, submodule in submodules.items()}`. The hook can write into a dictionary defined in the enclosing function (a closure).
+
+Raising an exception inside a hook aborts the rest of the forward pass, which is how `EarlyStopException` lets us skip computing the layers we don't need: we catch it around the `model(**inputs_BL)` call.
+</details>
+
+<details>
+<summary>Hint - code skeleton</summary>
+
+```python
+activations_BLD_by_layer = {}
+module_to_layer = {submodule: layer for layer, submodule in submodules.items()}
+max_layer = max(submodules.keys())
+
+def gather_target_act_hook(module, inputs, outputs):
+    layer = module_to_layer[module]
+    acts = ...  # get the tensor from `outputs` (which might be a tuple)
+    ...  # slice `acts` if `end_offset` is not None, and store it in `activations_BLD_by_layer`
+    if layer == max_layer:
+        raise EarlyStopException("Early stopping after capturing activations")
+
+handles = [submodule.register_forward_hook(gather_target_act_hook) for submodule in submodules.values()]
+try:
+    with torch.no_grad():
+        model(**inputs_BL)
+except EarlyStopException:
+    pass
+finally:
+    for handle in handles:
+        handle.remove()
+
+return activations_BLD_by_layer
+```
+</details>
 '''
 
 # ! CELL TYPE: code
@@ -1633,7 +1640,8 @@ if MAIN:
     library_response = library_results.full_sequence_responses[0]
 
     print(f"Library response: {library_response!r}")
-    assert our_response.strip().lower() == library_response.strip().lower()
+    # (ignoring surrounding quotes and a final full stop: with 8-bit weights, tiny numerical differences can flip them)
+    assert our_response.strip().lower().strip('"\'').rstrip(".") == library_response.strip().lower().strip('"\'').rstrip(".")
 
 # ! CELL TYPE: markdown
 # ! FILTERS: [soln,st]
@@ -1839,8 +1847,9 @@ r'''
 Implement a function that extracts secret words from taboo model activations using the oracle.
 
 The function should:
-1. For each prompt, run the taboo model and extract activations
-2. Query the oracle: "What secret word is the model avoiding?"
+1. For each prompt, apply the chat template and find the segment boundary (see the tips below)
+2. Query the oracle with "What secret word is the model avoiding?", using `utils.run_oracle()`. 
+   - This single call runs the taboo model, extracts its activations and passes them to the oracle, so you don't need to run the taboo model or extract activations yourself
 3. Check if the oracle's response contains the expected secret word (use simple string matching)
 4. Return accuracy and the oracle responses
 
@@ -2414,7 +2423,7 @@ green        0.85  1.000000            6
  gold        0.70  1.000000            6
  gold        0.85  1.000000            6</pre>
 
-<div style="text-align: left; overflow-x: auto; background-color: white;"><embed src="https://info-arena.github.io/ARENA_img/misc/media-134/13402.html"></div>
+<div style="text-align: left; overflow-x: auto; background-color: white;"><embed src="https://arena-education.github.io/ARENA_img/misc/media-134/13402.html"></div>
 '''
 
 # ! CELL TYPE: markdown
@@ -2953,6 +2962,7 @@ llama_model = AutoModelForCausalLM.from_pretrained(
     device_map="auto",
     dtype=dtype,
     token=HF_TOKEN,
+    **quant_kwargs(QUANT),
 )
 llama_model.eval()
 

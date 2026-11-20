@@ -108,62 +108,12 @@ ipython.run_line_magic("load_ext", "autoreload")
 ipython.run_line_magic("autoreload", "2")
 
 # ! CELL TYPE: code
-# ! FILTERS: [colab]
-# ! TAGS: [master-comment]
+# ! FILTERS: []
+# ! TAGS: []
 
-# import os
-# import sys
-# import warnings
-# from pathlib import Path
+import arena_lib
 
-# IN_COLAB = "google.colab" in sys.modules
-
-# chapter = "chapter3_llm_evals"
-# repo = "ARENA_materials"
-# branch = "main"
-
-# # Install dependencies
-# try:
-#     import inspect_ai
-# except:
-#     %pip install "openai>=1.56.2,<4" anthropic inspect_ai tabulate wikipedia jaxtyping
-
-# # Get root directory, handling 3 different cases: (1) Colab, (2) notebook not in ARENA repo, (3) notebook in ARENA repo
-# root = (
-#     "/content"
-#     if IN_COLAB
-#     else "/root"
-#     if repo not in os.getcwd()
-#     else str(next(p for p in Path.cwd().parents if p.name == repo))
-# )
-
-# if Path(root).exists() and not Path(f"{root}/{chapter}").exists():
-#     if not IN_COLAB:
-#         !sudo apt-get install unzip
-#         %pip install jupyter ipython --upgrade
-
-#     if not os.path.exists(f"{root}/{chapter}"):
-#         !wget -P {root} https://github.com/ARENA-education/ARENA_materials/archive/refs/heads/{branch}.zip
-#         !unzip {root}/{branch}.zip '{repo}-{branch}/{chapter}/exercises/*' -d {root}
-#         !mv {root}/{repo}-{branch}/{chapter} {root}/{chapter}
-#         !rm {root}/{branch}.zip
-#         !rmdir {root}/{repo}-{branch}
-
-# if IN_COLAB:
-#     from google.colab import userdata
-
-#     try:
-#         os.environ["OPENAI_API_KEY"] = userdata.get("OPENAI_API_KEY")
-#     except:
-#         warnings.warn(
-#             "You don't have an OPENAI_API_KEY variable set in the secrets tab of your google colab. You have to set one, or any calls to APIs won't work."
-#         )
-
-
-# if f"{root}/{chapter}/exercises" not in sys.path:
-#     sys.path.append(f"{root}/{chapter}/exercises")
-
-# os.chdir(f"{root}/{chapter}/exercises")
+exercises_dir, section_dir = arena_lib.setup("3.4")
 
 # ! CELL TYPE: code
 # ! FILTERS: []
@@ -171,7 +121,6 @@ ipython.run_line_magic("autoreload", "2")
 
 import os
 import re
-import sys
 from pathlib import Path
 from typing import Literal
 
@@ -190,15 +139,6 @@ from inspect_ai.model import (
 from inspect_ai.tool import Tool, tool
 from openai import OpenAI
 from wikipedia import DisambiguationError, PageError, WikipediaPage
-
-# Make sure exercises are in the path
-chapter = "chapter3_llm_evals"
-section = "part4_llm_agents"
-root_dir = next(p for p in Path.cwd().parents if (p / chapter).exists())
-exercises_dir = root_dir / chapter / "exercises"
-section_dir = exercises_dir / section
-if str(exercises_dir) not in sys.path:
-    sys.path.append(str(exercises_dir))
 
 import part4_llm_agents.tests as tests
 from part4_llm_agents.utils import evaluate_expression, execute_tools, extract_answer
@@ -260,7 +200,7 @@ The two basic components of scaffolding are:
 # ! TAGS: []
 
 r'''
-<img src="https://raw.githubusercontent.com/info-arena/ARENA_img/refs/heads/main/img/ch3-llm-agent.png" width="800">
+<img src="https://raw.githubusercontent.com/ARENA-education/ARENA_img/refs/heads/main/img/ch3-llm-agent.png" width="800">
 
 Diagram based on METR's [*Evaluating Language-Model Agents on Realistic Autonomous Tasks*](https://arxiv.org/abs/2312.11671), Figure 2.
 '''
@@ -505,6 +445,7 @@ print(s.perimeter) # Output: 16
 ```
 
 Using `@property` in this case helps with:
+
 1. Making the intent of the code clearer
 2. Making it slightly easier to access these "properties" of the class
 
@@ -642,6 +583,7 @@ Inspect will then find the argument types, descriptions, and the tool descriptio
 <details><summary><b>Good practices for writing tool descriptions</b></summary>
 
 Here are some good practices for writing tool descriptions for Claude according to Anthropic, which should generalize to other chat models:
+
 - Provide extremely detailed descriptions. This is by far the most important factor in how effectively the model uses the tool. Your descriptions should explain every aspect of the tool, including:
     - What the tool does
     - When it should be used (and when it *shouldn’t*, if this confuses the model)
@@ -726,7 +668,7 @@ r'''
 
 Now build our agent that will interact with the `ArithmeticTask` (with a calculator tool). You should implement the `execute()` function so that it runs the task in its entirety. For more complicated tasks, we'll implement a more modular agent design.
 
-You should use inspect's `generate()` function in order to get the model to use tools and generate a response (you can pass the tools to `generate()` via the `tools` argument). If the model decides to call a tool, you should use inspect's `execute_tools` function in order to run the tool. Finally, you should check whether the model's answer is correct or not. We've provided a helper function that extracts answers wrapped in `"<ANSWER></ANSWER>"` tags from the content of the agent's response, accessible by `utils.extract_answer()`. 
+You should use inspect's `generate()` function in order to get the model to use tools and generate a response (you can pass the tools to `generate()` via the `tools` argument). If the model decides to call a tool, you should use inspect's `execute_tools` function in order to run the tool. Finally, you should check whether the model's answer is correct or not. We've provided a helper function that extracts answers wrapped in `"<ANSWER></ANSWER>"` tags from the content of the agent's response, accessible by `extract_answer()`. 
 
 Then if the answer is correct, you should update the task so that the model moves on to the next problem. Finally, if all the answers are solved correctly, the loop should stop, as the model has accomplished its task.
 
@@ -745,8 +687,8 @@ def arithmetic_agent(task: ArithmeticTask):
         # END EXERCISE
         # SOLUTION
         answer_list = ["wrong"] * len(task.operations)
-        success = False
-        while not success:
+        max_steps = 20
+        for _ in range(max_steps):  # bounded, so a stuck model can't loop (and spend) forever
             state.messages.append(task.get_current_instruction())
             state.output = await get_model().generate(input=state.messages, tools=[calculate()], tool_choice="auto")
             state.messages.append(state.output.message)
@@ -765,7 +707,7 @@ def arithmetic_agent(task: ArithmeticTask):
             except IndexError:
                 state.messages.append(ChatMessageUser(content="Error: Could not extract answer"))
             if all(ans == task._generate_answers()[i] for i, ans in enumerate(answer_list)):
-                success = True
+                break
         return state
         # END SOLUTION
 
@@ -785,7 +727,7 @@ r'''
 > You should spend up to 5-10 minutes on this exercise.
 > ```
 
-Now let's use inspect's `eval()` function to run the agent. We can turn our agent into a "solver" using Inspect's `as_solver` function. We don't need to pass a `Solver` in this case, as we'll mostly be reading agent output. However, since there is a clear cut goal, you can write a solver if you'd like. Refer back to [section 3.3, Scorers](https://arena-chapter3-llm-evals.streamlit.app/[3.3]_Running_Evals_with_Inspect#scorers) if you don't remember how to do this. (We'll pass in an AgentState instead of a TaskState in this case).
+Now let's use inspect's `eval()` function to run the agent. We can turn our agent into a "solver" using Inspect's `as_solver` function. We don't need to pass a `Solver` in this case, as we'll mostly be reading agent output. However, since there is a clear cut goal, you can write a solver if you'd like. Refer back to [section 3.3, Scorers](https://learn.arena.education/chapter3_llm_evals/03_running_evals/2-solvers-and-scorers/#scorers) if you don't remember how to do this. (We'll pass in an AgentState instead of a TaskState in this case).
 
 > **WARNING!** 
 >
@@ -1103,6 +1045,7 @@ The implementation of this class has been provided for you, but you should read 
     - `page_history` which tracks all the pages the agent has visited in the game (initially only the `starting_page`).
 
 It also comes with 4 methods:
+
 - `get_page()` which takes the title of a Wikipedia page as a string, and returns the `WikipediaPage` object associated to this tile (this is the same as the `get_page()` function we introduced earlier).
 - `get_permitted_links()` which gets the permitted links from `WikiGame.current_page`. You can replace this function with your solution to the `get_permitted_links` exercise earlier if you prefer.
 - `is_permitted_link()` which takes a link name, and returns `True` if this link is a permitted link, and `False` otherwise.
@@ -1229,11 +1172,12 @@ r'''
 > ```
 
 The basic WikiAgent will need these two tools to play the game:
+
 1. `GetContentTool`: This returns the full content of the current page, with all the wikipedia links wrapped in `<link></link>` tags (as otherwise they are presented as strings and indistinguishable from normal text). Implementing this involves dealing with annoying regex, so we've provided the regex necessary to wrap links with link tags in the hint below. If you'd like an extra challenge, you can try and work it out yourself, but it's *really* not crucial to understanding any of the content today.
 
-2. `MovePageTool`: This executes moving to a given new page when called and updates the `WikiGame` task state if successful. You should implement both the `execute()` function and the `description()` property.
+2. `MovePageTool`: This executes moving to a given new page when called and updates the `WikiGame` task state if successful. You only need to implement the body of the `execute()` function; the docstring (which serves as the tool's description for the model) is already provided.
 
-When formatting this tool list, refer back to your code for the arithmetic game, or the OpenAI function-calling docs [here](https://platform.openai.com/docs/guides/function-calling).
+For more on how tools are described to the model, refer back to your code for the arithmetic game, or the OpenAI function-calling docs [here](https://platform.openai.com/docs/guides/function-calling).
 
 <details><summary>Why not just use <code>WikipediaPage.links()</code> to get a list of links directly?</summary>
 
@@ -1379,6 +1323,7 @@ We've implemented one method for this function which isn't very conceptually imp
 - `reset_history()` - this is useful for dealing with context window constraints as mentioned above. This method should be called each time the model successfully moves to a new page, to clear its current chat history.
 
 You'll need to implement the following variables:
+
 - `system_instruction` - this should return the system message as a `ChatMessageSystem` which we'll give to the model as it attempts the task. It should tell the model what the `WikiGame` is, and only the *basics* of how to play it.
 
 - `on_page_instruction` - this should be a user message as a `ChatMessageUser` telling the model the specific page it is on, and the page it should try to reach.
@@ -1471,9 +1416,9 @@ def WikiAgent(tools: list[Tool], game: WikiGame):
         # raise NotImplementedError("You need to implement the execute function")
         # END EXERCISE
         # SOLUTION
-        success = False
+        max_steps = 30
         state = await _start(state)
-        while not success:
+        for _ in range(max_steps):  # bounded, so a stuck model can't loop (and spend) forever
             state.messages.append(next_step_instruction)
             state.output = await get_model().generate(
                 input=state.messages,
@@ -1483,7 +1428,7 @@ def WikiAgent(tools: list[Tool], game: WikiGame):
             if state.output.message.tool_calls:
                 state = await _handle_tool_calls(state)
             if game.check_win():
-                success = True
+                break
         return state
         # END SOLUTION
 
@@ -1755,9 +1700,9 @@ def WikiAgentPrompting(tools: list[Tool], game: WikiGame) -> Agent:
         # raise NotImplementedError("You need to implement the execute function (copy your solution from before)")
         # END EXERCISE
         # SOLUTION
-        success = False
+        max_steps = 30
         state = await _start(state)
-        while not success:
+        for _ in range(max_steps):  # bounded, so a stuck model can't loop (and spend) forever
             state.messages.append(next_step_instruction)
             state.output = await get_model().generate(
                 input=state.messages,
@@ -1767,7 +1712,7 @@ def WikiAgentPrompting(tools: list[Tool], game: WikiGame) -> Agent:
             if state.output.message.tool_calls:
                 state = await _handle_tool_calls(state)
             if game.check_win():
-                success = True
+                break
         return state
         # END SOLUTION
 
@@ -1865,6 +1810,7 @@ def WikiAgentReAct(tools: list[Tool], game: WikiGame) -> Agent:
     # on_page_instruction =
     # raise NotImplementedError("You need to implement the prompts for the WikiAgentReAct (copy your solutions from before). You likely won't need the next_step_instruction this time.")
     # END EXERCISE
+    # SOLUTION
     system_instruction = ChatMessageSystem(
         content=f"You are a wikipedia-racing AI. Your goal is to reach {game.goal_page.title} by accessing links from wikipedia pages. Your current page is {game.current_page.title}."
     )
@@ -1873,6 +1819,7 @@ def WikiAgentReAct(tools: list[Tool], game: WikiGame) -> Agent:
         content=f"""You are currently on page: {game.current_page.title}. Make sure you start by reasoning about what steps you should take to get to the article on {game.goal_page.title}. When coming up with a strategy, make sure to pay attention to the path you have already taken, and if your current strategy doesn't seem to be working out, try something else. In case you're unsure, {game.goal_page.title} has the following summary:\n\n[Begin Summary]\n{game.get_page_summary(game.goal_page)}\n[End Summary]\n\nThe path you have taken so far is {" -> ".join(game.page_history)}.
             """
     )
+    # END SOLUTION
 
     async def _reset_history(state: AgentState):
         state.messages = []
@@ -1953,15 +1900,15 @@ def WikiAgentReAct(tools: list[Tool], game: WikiGame) -> Agent:
         # raise NotImplementedError("You need to reimplement the execute function")
         # END EXERCISE
         # SOLUTION
-        success = False
+        max_steps = 30
         state = await _start(state)
-        while not success:
+        for _ in range(max_steps):  # bounded, so a stuck model can't loop (and spend) forever
             state = await generate_reason(state)
             state = await generate_action(state)
             if state.output.message.tool_calls:
                 state = await _handle_tool_calls(state)
             if game.check_win():
-                success = True
+                break
         return state
         # END SOLUTION
 
@@ -2148,15 +2095,15 @@ def WikiAgentHistory(tools: list[Tool], game: WikiGame, verbose: bool = True):
         # raise NotImplementedError("You need to implement the execute function (copy your solution from before)")
         # END EXERCISE
         # SOLUTION
-        success = False
+        max_steps = 30
         state = await _start(state)
-        while not success:
+        for _ in range(max_steps):  # bounded, so a stuck model can't loop (and spend) forever
             state = await generate_reason(state)
             state = await generate_action(state)
             if state.output.message.tool_calls:
                 state = await _handle_tool_calls(state)
             if game.check_win():
-                success = True
+                break
         return state
         # END SOLUTION
 

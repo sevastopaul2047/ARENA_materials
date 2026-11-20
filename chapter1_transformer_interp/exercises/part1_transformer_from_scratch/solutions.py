@@ -1,12 +1,18 @@
 # %%
 
 
+import arena_lib
+
+exercises_dir, section_dir = arena_lib.setup("1.1")
+
+# %%
+
+import importlib.metadata
 import math
 import os
-import sys
+import time
 from collections import defaultdict
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Callable
 
 import datasets
@@ -14,27 +20,18 @@ import einops
 import numpy as np
 import torch as t
 import torch.nn as nn
-import wandb
 from jaxtyping import Float, Int
+from liveplot import LivePlot
 from rich import print as rprint
 from rich.table import Table
 from torch import Tensor
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
 from transformer_lens import HookedTransformer
-from transformer_lens.utils import gelu_new, tokenize_and_concatenate
+from transformer_lens.utilities import gelu_new, tokenize_and_concatenate
 from transformers import GPT2TokenizerFast
 
 device = t.device("mps" if t.backends.mps.is_available() else "cuda" if t.cuda.is_available() else "cpu")
-
-# Make sure exercises are in the path
-chapter = "chapter1_transformer_interp"
-section = "part1_transformer_from_scratch"
-root_dir = next(p for p in Path.cwd().parents if (p / chapter).exists())
-exercises_dir = root_dir / chapter / "exercises"
-section_dir = exercises_dir / section
-if str(exercises_dir) not in sys.path:
-    sys.path.append(str(exercises_dir))
 
 import part1_transformer_from_scratch.solutions as solutions
 import part1_transformer_from_scratch.tests as tests
@@ -117,16 +114,18 @@ if MAIN:
 # %%
 
 if MAIN:
-    print(f"Sequence so far: {reference_gpt2.to_string(tokens)[0]!r}")
+    # We use new variable names here, so that `tokens` & `logits` still refer to our original sequence in later cells
+    gen_tokens = tokens
+    print(f"Sequence so far: {reference_gpt2.to_string(gen_tokens)[0]!r}")
     
     for i in range(10):
-        print(f"{tokens.shape[-1] + 1}th char = {next_char!r}")
+        print(f"Token {gen_tokens.shape[-1] + 1}: {next_char!r}")
         # Define new input sequence, by appending the previously generated token
-        tokens = t.cat([tokens, next_token[None, None]], dim=-1)
+        gen_tokens = t.cat([gen_tokens, next_token[None, None]], dim=-1)
         # Pass our new sequence through the model, to get new output
-        logits = reference_gpt2(tokens)
+        gen_logits = reference_gpt2(gen_tokens)
         # Get the predicted token at the end of our sequence
-        next_token = logits[0, -1].argmax(dim=-1)
+        next_token = gen_logits[0, -1].argmax(dim=-1)
         # Decode and print the result
         next_char = reference_gpt2.to_string(next_token)
 
@@ -374,7 +373,9 @@ class Attention(nn.Module):
 if MAIN:
     tests.test_causal_mask(Attention.apply_causal_mask)
     tests.rand_float_test(Attention, [2, 4, 768])
-    tests.load_gpt2_test(Attention, reference_gpt2.blocks[0].attn, cache["normalized", 0, "ln1"])
+    # ln1's output, not cache["normalized", 0, "ln1"], which is before `* w + b` since TransformerLens 3:
+    # https://github.com/TransformerLensOrg/TransformerLens/pull/770
+    tests.load_gpt2_test(Attention, reference_gpt2.blocks[0].attn, reference_gpt2.blocks[0].ln1(cache["resid_pre", 0]))
 
 # %%
 
@@ -408,7 +409,9 @@ class MLP(nn.Module):
 
 if MAIN:
     tests.rand_float_test(MLP, [2, 4, 768])
-    tests.load_gpt2_test(MLP, reference_gpt2.blocks[0].mlp, cache["normalized", 0, "ln2"])
+    # ln2's output, not cache["normalized", 0, "ln2"], which is before `* w + b` since TransformerLens 3:
+    # https://github.com/TransformerLensOrg/TransformerLens/pull/770
+    tests.load_gpt2_test(MLP, reference_gpt2.blocks[0].mlp, reference_gpt2.blocks[0].ln2(cache["resid_mid", 0]))
 
 # %%
 
@@ -457,7 +460,9 @@ class Unembed(nn.Module):
 if MAIN:
     tests.test_unembed(Unembed)
     tests.rand_float_test(Unembed, [2, 4, 768])
-    tests.load_gpt2_test(Unembed, reference_gpt2.unembed, cache["ln_final.hook_normalized"])
+    # ln_final's output, not cache["ln_final.hook_normalized"], which is before `* w + b` since TransformerLens 3:
+    # https://github.com/TransformerLensOrg/TransformerLens/pull/770
+    tests.load_gpt2_test(Unembed, reference_gpt2.unembed, reference_gpt2.ln_final(cache["resid_post", 11]))
 
 # %%
 
@@ -506,8 +511,8 @@ def get_log_probs(
 if MAIN:
     pred_log_probs = get_log_probs(demo_logits, tokens)
     print(f"Avg cross entropy loss: {-pred_log_probs.mean():.4f}")
-    print(f"Avg cross entropy loss for uniform distribution: {math.log(demo_gpt2.cfg.d_vocab):4f}")
-    print(f"Avg probability assigned to correct token: {pred_log_probs.exp().mean():4f}")
+    print(f"Avg cross entropy loss for uniform distribution: {math.log(demo_gpt2.cfg.d_vocab):.4f}")
+    print(f"Avg probability assigned to correct token: {pred_log_probs.exp().mean():.4f}")
 
 # %%
 
@@ -540,12 +545,10 @@ if MAIN:
 @dataclass
 class TransformerTrainingArgs:
     batch_size: int = 32
-    epochs: int = 10
+    epochs: int = 5  # ~4 minutes on a Colab T4; more epochs give a slightly better model
     max_steps_per_epoch: int = 500
     lr: float = 1e-3
     weight_decay: float = 1e-2
-    wandb_project: str | None = "day1-demotransformer"
-    wandb_name: str | None = None
     eval_prompt: str = "Once upon a time"
 
 
@@ -555,8 +558,9 @@ if MAIN:
 # %%
 
 if MAIN:
-    dataset = datasets.load_dataset("roneneldan/TinyStories", split="train")
-    # Keep the first 200k of the 2.1M stories, as we only need a subset for training.
+    # Download the first of the 4 training files (530k of 2.1M stories), and keep 200k stories.
+    first_file = "data/train-00000-of-00004-*.parquet"
+    dataset = datasets.load_dataset("roneneldan/TinyStories", data_files=first_file, split="train")
     dataset = dataset.select(range(200_000))
     print(dataset)
     print(dataset[0]["text"])
@@ -571,24 +575,12 @@ if MAIN:
         max_length=model.cfg.n_ctx,
         column_name="text",
         add_bos_token=True,
-        num_proc=8,
+        num_proc=min(8, os.cpu_count()),  # more processes than CPUs only costs memory
     )
     
     dataset_dict = tokenized_dataset.train_test_split(test_size=1000)
-    train_loader = DataLoader(
-        dataset_dict["train"], 
-        batch_size=args.batch_size, 
-        shuffle=True, 
-        #num_workers=4, runs faster, but kills the kernel if interrupted
-        #pin_memory=False
-    )
-    test_loader = DataLoader(
-        dataset_dict["test"], 
-        batch_size=args.batch_size, 
-        shuffle=False, 
-        #num_workers=4, 
-        #pin_memory=False
-    )
+    train_loader = DataLoader(dataset_dict["train"], batch_size=args.batch_size, shuffle=True)
+    test_loader = DataLoader(dataset_dict["test"], batch_size=args.batch_size, shuffle=False)
 
 # %%
 
@@ -609,24 +601,12 @@ class TransformerTrainer:
         self.optimizer = t.optim.AdamW(self.model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
         self.step = 0
 
-        self.train_loader = DataLoader(
-            dataset_dict["train"],
-            batch_size=args.batch_size,
-            shuffle=True,
-            #num_workers=4, runs faster, but kills the kernel if interrupted
-            #pin_memory=False,
-        )
-        self.test_loader = DataLoader(
-            dataset_dict["test"],
-            batch_size=args.batch_size,
-            shuffle=False,
-            #num_workers=4,
-            #pin_memory=False,
-        )
+        self.train_loader = DataLoader(dataset_dict["train"], batch_size=args.batch_size, shuffle=True)
+        self.test_loader = DataLoader(dataset_dict["test"], batch_size=args.batch_size, shuffle=False)
 
     def training_step(self, batch: dict[str, Int[Tensor, "batch seq"]]) -> Float[Tensor, ""]:
         """
-        Calculates the loss on the tokens in the batch, performs a gradient update step, and logs the loss.
+        Calculates the loss on the tokens in the batch, performs a gradient update step, and returns the loss.
 
         Remember that `batch` is a dictionary with the single key 'tokens'.
         """
@@ -637,7 +617,6 @@ class TransformerTrainer:
         self.optimizer.step()
         self.optimizer.zero_grad()
         self.step += 1
-        wandb.log({"train_loss": loss}, step=self.step)
         return loss
 
     @t.inference_mode()
@@ -656,37 +635,34 @@ class TransformerTrainer:
             total_samples += tokens.size(0) * (tokens.size(1) - 1)
 
         accuracy = total_correct / total_samples
-        wandb.log({"accuracy": accuracy}, step=self.step)
         self.model.train()
         return accuracy
 
     def train(self):
         """
-        Trains the model, for `self.args.epochs` epochs. Also handles wandb initialisation, and early stopping
-        for each epoch at `self.args.max_steps_per_epoch` steps.
+        Trains the model, for `self.args.epochs` epochs. Also plots the loss and accuracy, and handles early
+        stopping for each epoch at `self.args.max_steps_per_epoch` steps.
         """
-        wandb.init(project=self.args.wandb_project, name=self.args.wandb_name, config=self.args)
-        accuracy = np.nan
-
-        progress_bar = tqdm(total=self.args.max_steps_per_epoch * self.args.epochs)
+        plot = LivePlot("loss | accuracy", total=self.args.max_steps_per_epoch * self.args.epochs)
+        plot["loss"].axhline(math.log(self.model.cfg.d_vocab), "uniform")
 
         print(self.sampler.sample(self.args.eval_prompt, max_tokens_generated=50))
         for epoch in range(self.args.epochs):
+            plot.set_description(f"Epoch {epoch + 1}")
             for i, batch in enumerate(self.train_loader):
                 loss = self.training_step(batch)
-                progress_bar.update()
-                progress_bar.set_description(f"Epoch {epoch + 1}, loss: {loss:.3f}, accuracy: {accuracy:.3f}")
-                if i >= self.args.max_steps_per_epoch:
+                plot.log(loss=loss)
+                plot.update()
+                if i + 1 >= self.args.max_steps_per_epoch:
                     break
 
-            accuracy = self.evaluate()
+            plot.log(accuracy=self.evaluate())
             print(self.sampler.sample(self.args.eval_prompt, max_tokens_generated=50))
 
-        wandb.finish()
+        plot.finish()
 
 
 if MAIN:
-    # See the full run here: https://api.wandb.ai/links/dquarel/nrxuwnv7
     model = DemoTransformer(model_cfg).to(device)
     args = TransformerTrainingArgs()
     trainer = TransformerTrainer(args, model)
@@ -732,61 +708,48 @@ if MAIN:
 
 @dataclass
 class TransformerTrainingArgsLogText(TransformerTrainingArgs):
-    text_sample_freq: int = 20
-    table_log_freq: int = 200
-
-    def __post_init__(self):
-        assert self.table_log_freq >= self.text_sample_freq, (
-            "You should log the table less frequently than you add text to it."
-        )
+    text_sample_freq: int = 500
 
 
 def train_log_text(self: TransformerTrainer, sampling_fn: Callable, prompt_list: list[str]):
     """
-    Trains the model, for `self.args.epochs` epochs. Also handles wandb initialisation, and early stopping
-    for each epoch at `self.args.max_steps_per_epoch` steps.
+    Trains the model, for `self.args.epochs` epochs. Also plots the loss and accuracy, and handles early
+    stopping for each epoch at `self.args.max_steps_per_epoch` steps.
 
     This also takes 2 extra arguments:
         sampling_fn: function which takes model & a single prompt (i.e. text string) and returns text string output
         prompt_list: list of prompts we'll log output on
     """
-    wandb.init(project=self.args.wandb_project, name=self.args.wandb_name, config=self.args)
-    accuracy = np.nan
-    progress_bar = tqdm(total=self.args.max_steps_per_epoch * self.args.epochs)
+    plot = LivePlot("loss | accuracy", total=self.args.max_steps_per_epoch * self.args.epochs)
+    plot["loss"].axhline(math.log(self.model.cfg.d_vocab), "uniform")
 
     # Create a list for storing data
     completions_list = []
 
     for epoch in range(self.args.epochs):
+        plot.set_description(f"Epoch {epoch + 1}")
         for i, batch in enumerate(self.train_loader):
             loss = self.training_step(batch)
-            progress_bar.update()
-            progress_bar.set_description(f"Epoch {epoch + 1}, loss: {loss:.3f}, accuracy: {accuracy:.3f}")
+            plot.log(loss=loss)
+            plot.update()
 
-            # Control the adding of text to the table, and the logging of text
+            # Sample completions every `text_sample_freq` steps
             if self.step % self.args.text_sample_freq == 0:
                 text_completions = [sampling_fn(self.model, prompt) for prompt in prompt_list]
                 completions_list.append([epoch, self.step, *text_completions])
-            if self.step % self.args.table_log_freq == 0:
-                wandb.log(
-                    {
-                        "completions_table": wandb.Table(
-                            data=completions_list,
-                            columns=[
-                                "epoch",
-                                "step",
-                                *[f"prompt_{i}" for i in range(len(prompt_list))],
-                            ],
-                        )
-                    }
-                )
 
-            if i >= self.args.max_steps_per_epoch:
+            if i + 1 >= self.args.max_steps_per_epoch:
                 break
 
-        accuracy = self.evaluate()
+        plot.log(accuracy=self.evaluate())
 
-    wandb.finish()
+    plot.finish()
+
+    # Show the completions in a table, one row per sample step
+    table = Table("epoch", "step", *[f"prompt_{i}" for i in range(len(prompt_list))], show_lines=True)
+    for epoch, step, *text_completions in completions_list:
+        table.add_row(str(epoch), str(step), *[repr(text) for text in text_completions])
+    rprint(table)
 
 
 TransformerTrainer.train = train_log_text
@@ -803,7 +766,6 @@ if MAIN:
     args = TransformerTrainingArgsLogText()
     trainer = TransformerTrainer(args, model)
     trainer.train(sampling_fn, prompt_list)
-    # Read full report here - https://api.wandb.ai/links/callum-mcdougall/5ex16e5w
 
 # %%
 
@@ -959,6 +921,13 @@ if MAIN:
     model = DemoTransformer(Config()).to(device)
     model.load_state_dict(reference_gpt2.state_dict(), strict=False)
     tokenizer = reference_gpt2.tokenizer
+    # The expected outputs below assume encode() prepends BOS, which old library versions don't do
+    assert tokenizer.encode("Hello")[0] == tokenizer.bos_token_id, (
+        "reference_gpt2.tokenizer.encode() didn't prepend the BOS token, so the expected outputs below won't match. "
+        "This happens with outdated libraries: install transformer_lens>=3.9 and transformers>=5.9, then restart. "
+        f"Installed: transformer_lens {importlib.metadata.version('transformer_lens')}, "
+        f"transformers {importlib.metadata.version('transformers')}."
+    )
     sampler = TransformerSampler(model, tokenizer)
 
     prompt = "Jingle bells, jingle bells, jingle all the way"
@@ -1168,6 +1137,7 @@ class Beams:
         """
         Starts from the current set of beams (i.e. self.tokens) and returns a new set of `len(self.tokens) * k` beams,
         containing the best `k` continuations for each of the original beams.
+        Note that this should be a new `Beams` instance, rather than modifying `self` in place.
 
         Optional argument `no_repeat_ngram_size` means your model won't generate any sequences with a repeating n-gram
         of this length.
@@ -1211,7 +1181,7 @@ class Beams:
         logprobs: Float[Tensor, "batch d_vocab"],
         no_repeat_ngram_size: int | None,
         k: int,
-    ) -> tuple[Float[Tensor, " k"], Int[Tensor, " k"]]:
+    ) -> tuple[Float[Tensor, "batch k"], Int[Tensor, "batch k"]]:
         """
         logprobs:
             tensor of the log-probs for the next token
@@ -1235,7 +1205,7 @@ class Beams:
             for i in range(seq_len - (no_repeat_ngram_size - 1)):
                 ngrams = self.tokens[:, i : i + no_repeat_ngram_size]  # (batch, ngram)
                 ngrams_are_repeated = (ngrams[:, :-1] == last_ngram_prefix).all(-1)  # (batch,)
-                ngram_end_tokens = ngrams[:, [-1]]  # (batch, 1)
+                ngram_end_tokens = ngrams[:, -1]  # (batch,)
                 # Fill logprobs with neginf wherever the ngrams are repeated
                 logprobs[range(batch), ngram_end_tokens] = t.where(
                     ngrams_are_repeated, -1.0e10, logprobs[range(batch), ngram_end_tokens]

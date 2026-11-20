@@ -1,14 +1,19 @@
 # %%
 
 
+import arena_lib
+
+exercises_dir, section_dir = arena_lib.setup("1.3.4")
+
+# %%
+
 import contextlib
 import gc
+import logging
 import os
 import re
-import sys
 import textwrap
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Callable
 
 import pandas as pd
@@ -25,14 +30,6 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 
 torch.set_grad_enabled(False)
 
-# Make sure exercises are in the path
-chapter = "chapter1_transformer_interp"
-section = "part34_activation_oracles"
-root_dir = next(p for p in Path.cwd().parents if (p / chapter).exists())
-exercises_dir = root_dir / chapter / "exercises"
-section_dir = exercises_dir / section
-if str(exercises_dir) not in sys.path:
-    sys.path.append(str(exercises_dir))
 
 # Disable runtime errors from custom hooks
 os.environ["TORCHDYNAMO_DISABLE"] = "1"
@@ -42,10 +39,20 @@ os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 import part34_activation_oracles.tests as tests
 import part34_activation_oracles.utils as utils
 
+from arena_lib.quant import quant_kwargs
+
 MAIN = __name__ == "__main__"
 
 dtype = torch.bfloat16
 device = torch.device("mps" if torch.backends.mps.is_available() else "cuda" if torch.cuda.is_available() else "cpu")
+
+# LOW_GPU_MEM fires automatically on GPUs with less than 20 GiB (e.g. Colab's 16GB T4), or with no CUDA GPU at all.
+LOW_GPU_MEM = not torch.cuda.is_available() or torch.cuda.get_device_properties(0).total_memory / (1024**3) < 20
+# Low-memory path: 8-bit base weights (~9 GB per 8B model instead of ~16 GB); bitsandbytes needs a CUDA GPU
+QUANT = "int8" if LOW_GPU_MEM and torch.cuda.is_available() else None
+# 8-bit matmuls cast bfloat16 inputs to float16, and log a warning about it on every call
+logging.getLogger("bitsandbytes.autograd._functions").setLevel(logging.ERROR)
+print(f"{LOW_GPU_MEM=}, base models in {'8-bit' if QUANT else dtype}")
 
 
 def print_with_wrap(s: str, width: int = 80):
@@ -73,6 +80,7 @@ if MAIN:
         MODEL_NAME,
         device_map="auto",
         dtype=dtype,
+        **quant_kwargs(QUANT),
     )
     model.eval()
     
@@ -768,7 +776,8 @@ if MAIN:
     library_response = library_results.full_sequence_responses[0]
 
     print(f"Library response: {library_response!r}")
-    assert our_response.strip().lower() == library_response.strip().lower()
+    # (ignoring surrounding quotes and a final full stop: with 8-bit weights, tiny numerical differences can flip them)
+    assert our_response.strip().lower().strip('"\'').rstrip(".") == library_response.strip().lower().strip('"\'').rstrip(".")
 
 # %%
 
@@ -1407,6 +1416,7 @@ if MAIN:
         device_map="auto",
         dtype=dtype,
         token=HF_TOKEN,
+        **quant_kwargs(QUANT),
     )
     llama_model.eval()
     
