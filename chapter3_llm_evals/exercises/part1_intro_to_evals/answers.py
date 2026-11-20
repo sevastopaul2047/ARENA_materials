@@ -23,28 +23,22 @@ from tqdm.auto import tqdm
 # Make sure exercises are in the path
 chapter = "chapter3_llm_evals"
 section = "part1_intro_to_evals"
-
-# Find the ARENA repository root, including the current directory.
-root_dir = next(
-    p for p in (Path.cwd(), *Path.cwd().parents)
-    if (p / chapter).exists()
-)
-
+root_dir = next(p for p in Path.cwd().parents if (p / chapter).exists()) # Get the root directory for the chapter
 section_dir = root_dir / chapter / "exercises" / section
 exercises_dir = root_dir / chapter / "exercises"
-
 if str(exercises_dir) not in sys.path:
     sys.path.append(str(exercises_dir))
 
 MAIN = __name__ == "__main__"
 
-print("ARENA setup working!")  # Check if the setup is working
-print("Repository:", root_dir)  # Print the repository path
-print("Section:", section_dir)  # Print the section path
+print("ARENA setup working!") #check if the setup is working
+print("Repository:", root_dir) #print the repository path
+print("Section:", section_dir) #print the section path
 
 
 # %% First free API call - automatic model fallback
 
+ # Import specific error classes from the OpenAI library for handling API errors.
 from openai import (
     APIConnectionError,
     APIStatusError,
@@ -54,8 +48,38 @@ from openai import (
     RateLimitError,
 )
 
-# Models are tried in order. A successful response stops the search.
-# All these model IDs refer to free OpenRouter endpoints.
+# WHY USE FREE MODEL FALLBACK?
+#
+# The primary goal is to verify that our OpenRouter API configuration works
+# before purchasing any API credits. We want to confirm that our API key,
+# client configuration, and request/response handling work end-to-end
+# using only models available through OpenRouter's free tier.
+#
+# However, free models may experience limited availability, provider
+# outages, or temporary capacity restrictions. During initial testing,
+# NVIDIA Nemotron returned a provider-side HTTP 404 error.
+#
+# Rather than treating one model's failure as a failure of our entire
+# API setup, we try several free models in a predefined order.
+# The first model returning usable text is selected, and no further
+# requests are made.
+#
+# WHY NOT JUST USE max_retries?
+#
+# The OpenAI SDK's max_retries repeats requests to the same model for
+# certain retryable errors. It does not normally retry HTTP 404 errors.
+# Our fallback instead switches to a different model when one fails.
+# We disable automatic retries to keep API attempts predictable.
+#
+# LIMITATIONS:
+# - Fallback cannot resolve invalid API keys or account-wide restrictions.
+# - Failed requests may still count toward free-tier request limits.
+# - A successful response verifies this API path, not every model.
+# - This mechanism is only for initial API testing and general usage.
+#   Controlled evaluations must use fixed models to ensure valid comparisons.
+#
+# All models below use OpenRouter's free endpoints and are tried in order.
+
 FREE_MODELS = [
     "nvidia/nemotron-3-super-120b-a12b:free",
     "dots-studio/dots-3-note-preview:free",
@@ -106,6 +130,7 @@ def get_first_working_response(
 
             # Success: return immediately; remaining models are not called.
             print(f"  Success! Model: {model}")
+            pprint(response.model_dump())
             return model, content.strip()
 
         except AuthenticationError:
